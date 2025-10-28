@@ -14,11 +14,6 @@ print(df.columns)
 # 2. 라벨 및 특징 정의
 df['label'] = df["emotion"].map({"sad":0, "angry": 1})
 features = ["mean_hr","std_hr","min_hr","max_hr","range_hr"]
-# features = [
-#     'mean_hr_sad','std_hr_sad','range_hr_sad','min_hr_sad',  # sad
-#     'mean_hr_angry','std_hr_angry','range_hr_angry','min_hr_angry', # angry
-#     'delta_mean','delta_std','delta_range'  # delta values
-# ]
 x = df[features].values    # 모델 입력
 y = df["label"].values     # 정답 (sad=0 angry=1)
 tf = df["mbti_tf"].values  # tf 구분
@@ -47,17 +42,8 @@ x_test = scaler.transform(test[features])
 # x_val = val[features]
 # x_test = test[features]
 
-train_bin = train[train["label"] != 2]
-x_train_bin = scaler.transform(train_bin[features])
-y_train_bin = train_bin["label"]
-
-# clf = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
-# clf.fit(x_train,train["label"])
-
-clf = LogisticRegression(max_iter=1000,class_weight='balanced')
-clf.fit(x_train_bin, y_train_bin)
-
-print(clf.classes_)
+clf = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
+clf.fit(x_train,train["label"])
 
 # 5. 임게값 (논리공식?)
 # def predict_3class(p_ang, th_ang, th_sad):
