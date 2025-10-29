@@ -89,20 +89,51 @@ def predict_3class(p_ang, th_ang, th_sad):
 #                 best = {"th_ang": round(ta, 2), "th_sad": round(ts, 2), "score": round(f1, 3)}
 #     return best
 
-def sweep_for_group(p, y, mask):
+# def sweep_for_group(p, y, mask):
+#     best = {"th_ang": None, "th_sad": None, "score": -1.0}
+#     # grid = np.arange(0.30, 0.81, 0.01)  # 탐색 범위 넓힘
+#     grid = np.arange(0.45, 0.9, 0.02) # 더 넓힘...
+#     for ta in grid:
+#         for ts in grid:
+#             # 3클래스 예측
+#             pred3 = predict_3class(p[mask], ta, ts)
+#             # NORMAL/SAD=0, ANGRY=1
+#             pred2 = (pred3 == 2).astype(int)
+#             f1 = f1_score(y[mask], pred2, average="binary", zero_division=0)
+#             if f1 > best["score"]:
+#                 best = {"th_ang": round(ta, 2), "th_sad": round(ts, 2), "score": round(f1, 3)}
+#     return best
+
+def sweep_for_group(p, y, mask,
+                    grid=np.arange(0.45, 0.90, 0.02),
+                    normal_band_margin=0.05):  # NORMAL 최소 폭(~5%)
+
+    # 모두 넘파이로 통일(위치 인덱싱)
+    p = np.asarray(p)
+    y = np.asarray(y)
+    mask = np.asarray(mask, dtype=bool)
+    idx = np.flatnonzero(mask)
+    if idx.size == 0:
+        return None
+
     best = {"th_ang": None, "th_sad": None, "score": -1.0}
-    # grid = np.arange(0.30, 0.81, 0.01)  # 탐색 범위 넓힘
-    grid = np.arange(0.45, 0.9, 0.02) # 더 넓힘...
+
     for ta in grid:
         for ts in grid:
-            # 3클래스 예측
-            pred3 = predict_3class(p[mask], ta, ts)
-            # NORMAL/SAD=0, ANGRY=1
-            pred2 = (pred3 == 2).astype(int)
-            f1 = f1_score(y[mask], pred2, average="binary", zero_division=0)
+            # NORMAL 밴드 강제: th_ang > 1 - th_sad + margin
+            if ta <= (1 - ts + normal_band_margin):
+                continue
+
+            pred3 = predict_3class(p[idx], ta, ts)   # 0=N,1=S,2=A
+            pred2 = (pred3 == 2).astype(int)         # A vs (S/N)
+            f1 = f1_score(y[idx], pred2, average="binary", zero_division=0)
+
             if f1 > best["score"]:
-                best = {"th_ang": round(ta, 2), "th_sad": round(ts, 2), "score": round(f1, 3)}
+                best = {"th_ang": float(round(ta, 2)),
+                        "th_sad": float(round(ts, 2)),
+                        "score": float(round(f1, 3))}
     return best
+
 
 val_mbti = val["mbti_tf"].astype(str).str.strip().str.lower()
 print("VAL T/F counts:\n", val_mbti.value_counts())
