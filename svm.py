@@ -328,15 +328,36 @@ clf_rf = RandomForestClassifier(
 clf_gb = GradientBoostingClassifier(random_state=42)
 
 # 실행
-
 eval_model("RandomForest",       clf_rf)
 eval_model("GradientBoosting",   clf_gb)
 
+# 어플리케이션과 연동 (API)
+# import joblib
+
+#     # 학습 끝난 뒤 추가 ↓
+# joblib.dump(scaler, "scaler.pkl")
+# joblib.dump(clf_svm, "model.pkl")
+# joblib.dump(clf_rf, "model_rf.pkl")
+# joblib.dump(clf_gb, "model_gb.pkl")
+# joblib.dump(
+#     {"T": bestT_svm, "F": bestF_svm, "ALL": bestALL, "use": "TF"},
+#     "thresholds.pkl"
+# )
+# print("모델, 스케일러, 임계값 저장 완료!")
+
 # 어플리케이션과 연동 (json)
+import json
 
-# 어플리케이션과 연동 (어플리케이션 내 평가 함수)
+thresholds_dict = {
+    "T": bestT_svm,
+    "F": bestF_svm,
+    "ALL": bestALL,
+    "use": "TF"  # 또는 "ALL"
+}
 
-
+with open("thresholds.json", "w", encoding="utf-8") as f:
+    json.dump(thresholds_dict, f, indent=4)
+print("✅ thresholds.json 저장 완료!")
 
 
 # 기본 svm 이진 분류
