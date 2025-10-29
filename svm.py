@@ -157,13 +157,35 @@ p_val_svm = clf_svm.predict_proba(x_val)[:, 1]  # angry 확률
 # p_val_svm  = clf.predict_proba(x_val)[:, 1]   # angry 확률
 # p_test_svm = clf.predict_proba(x_test)[:, 1]
 
+# 기본값으로
 # maskT = (val["mbti_tf"]=="t")
 # maskF = (val["mbti_tf"]=="f")
-maskT = (val_mbti == "t")
-maskF = (val_mbti == "f")
 
-bestF_svm = sweep_for_group(p_val_svm, val["label"], maskF)
-bestT_svm = sweep_for_group(p_val_svm, val["label"], maskT)
+# 한 번 인덱싱된 값으로
+# maskT = (val_mbti == "t")
+# maskF = (val_mbti == "f")
+
+# bestF_svm = sweep_for_group(p_val_svm, val["label"], maskF)
+# bestT_svm = sweep_for_group(p_val_svm, val["label"], maskT)
+
+# f가 좀 적을 때 
+# 마스크 넘파이로
+val_mbti_norm = val["mbti_tf"].astype(str).str.strip().str.lower()
+maskT = (val_mbti_norm == "t").to_numpy()
+maskF = (val_mbti_norm == "f").to_numpy()
+maskALL = np.ones(len(val), dtype=bool)
+
+# 넘파이 라벨 전달
+y_val_np = val["label"].to_numpy()
+
+# 임계값 탐색
+bestT_svm = sweep_for_group(p_val_svm, y_val_np, maskT)
+bestF_svm = sweep_for_group(p_val_svm, y_val_np, maskF)
+bestALL   = sweep_for_group(p_val_svm, y_val_np, maskALL)
+
+# F 폴백(표본 부족/스코어 불가 시)
+if (maskF.sum() < 4) or (bestF_svm is None) or (bestF_svm.get("score", 0) <= 0):
+    bestF_svm = bestALL or bestT_svm
 
 # ---- 테스트셋 3클래스 판정 (T/F별 임계값 적용) ----
 # 1) mbti_tf 문자열 정규화 (공백/대소문자 안전)
@@ -230,6 +252,85 @@ p_raw = svm_raw.predict_proba(x_val)[:,1]
 print("RAW prob mean/std:", np.mean(p_raw), np.std(p_raw))
 print("CAL prob mean/std:", np.mean(p_val_svm), np.std(p_val_svm))
 
+# === 여러 모델 비교 + 임계값 스윕 + 3클래스 적용 + classification_report 출력 ===
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.svm import LinearSVC
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.metrics import classification_report
+import numpy as np
+import pandas as pd
+
+# (전제) 아래 변수/함수들이 기존 코드 상단에서 이미 존재한다고 가정:
+
+def eval_model(model_name, clf_proba):
+    """clf_proba: fit(X,y) 및 predict_proba(X)[:,1] 가능한 분류기 (또는 Calibrated wrapper)"""
+    print("\n" + "="*80)
+    print(f"[{model_name}]")
+
+    # 1) 학습
+    clf_proba.fit(x_train_bin_scaled, y_train_bin)
+
+    # 2) 검증/테스트 확률 (angry=1의 확률)
+    p_val  = clf_proba.predict_proba(x_val)[:, 1]
+    p_test = clf_proba.predict_proba(x_test)[:, 1]
+
+    # 3) T/F 마스크 (넘파이)
+    val_mbti_norm  = val["mbti_tf"].astype(str).str.strip().str.lower()
+    test_mbti_norm = test["mbti_tf"].astype(str).str.strip().str.lower()
+    maskT = (val_mbti_norm == "t").to_numpy()
+    maskF = (val_mbti_norm == "f").to_numpy()
+    maskALL = np.ones(len(val), dtype=bool)
+    y_val_np = val["label"].to_numpy()
+
+    # 4) 임계값 스윕 (T/F/전체) + F 폴백
+    bestT = sweep_for_group(p_val, y_val_np, maskT)
+    bestF = sweep_for_group(p_val, y_val_np, maskF)
+    bestALL = sweep_for_group(p_val, y_val_np, maskALL)
+    if (maskF.sum() < 4) or (bestF is None) or (bestF.get("score", 0) <= 0):
+        bestF = bestALL or bestT
+
+    print("Best thresholds (T):", bestT)
+    print("Best thresholds (F):", bestF)
+
+    # 5) 테스트셋 3클래스 적용
+    tf_test_str = test_mbti_norm.to_numpy()              # 't'/'f'
+    y_true = test["label"].to_numpy().astype(int)        # 0=SAD, 1=ANGRY
+
+    def predict_3class_with_tf(p_ang, tf_group_str, bestT, bestF):
+        out = np.zeros(len(p_ang), dtype=int)  # 0=NORMAL
+        for i, (p, g) in enumerate(zip(p_ang, tf_group_str)):
+            isT = (g == "t")
+            th_ang = bestT["th_ang"] if isT else bestF["th_ang"]
+            th_sad = bestT["th_sad"] if isT else bestF["th_sad"]
+            # 규칙: angry 우선 → sad → 나머지 normal
+            out[i] = 2 if p >= th_ang else (1 if (1 - p) >= th_sad else 0)
+        return out
+
+    pred3_test = predict_3class_with_tf(p_test, tf_test_str, bestT, bestF)
+
+    # 6) 리포트(목적에 맞는 지표): 3클래스 규칙에서 angry vs (sad/normal) 이진
+    pred2_from3 = (pred3_test == 2).astype(int)
+    print("\n[{}] 2-class report (from 3-class TF-threshold rule):".format(model_name))
+    print(classification_report(y_true, pred2_from3,
+                                labels=[0,1], target_names=["SAD","ANGRY"], zero_division=0))
+    print("NORMAL rate on test:", float((pred3_test == 0).mean()))
+
+# ---- 후보 모델들 ----
+
+# 2) Random Forest
+clf_rf = RandomForestClassifier(
+    n_estimators=300, max_depth=None, min_samples_leaf=1,
+    class_weight='balanced', random_state=42
+)
+
+# 3) Gradient Boosting
+clf_gb = GradientBoostingClassifier(random_state=42)
+
+# 실행
+
+eval_model("RandomForest",       clf_rf)
+eval_model("GradientBoosting",   clf_gb)
 
 # 어플리케이션과 연동 (json)
 
