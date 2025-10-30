@@ -143,31 +143,88 @@ def predict_3class(p_ang, th_ang, th_sad):
 #     }
 
 # 한 번 선택한 임계값을 로그, 판정, 응답 모두에 동일 적용
+# @app.post("/predict")
+# def predict(data: EmotionInput):
+#     # --- 그룹/임계값 선택 (한 번만) ---
+#     group = "T" if data.mbti_tf.strip().lower()=="t" else "F"
+#     if thresholds.get("use","TF") == "ALL":
+#         group = "ALL"
+
+#     th = thresholds[group]
+#     th_ang, th_sad = float(th["th_ang"]), float(th["th_sad"])
+#     gap = th_ang - (1 - th_sad)
+#     print(f"[CHK] group={group} th_ang={th_ang} th_sad={th_sad} gap={gap:.3f}")
+
+#     # (선택) NORMAL 밴드 강제 확보
+#     if gap <= 0:
+#         bump = 0.02 - gap  # 최소 0.02 확보
+#         th_ang = min(0.99, th_ang + bump/2)
+#         th_sad = min(0.99, th_sad + bump/2)
+#         print(f"[FIX] adjusted th_ang={th_ang:.3f} th_sad={th_sad:.3f} (gap>0 enforced)")
+
+#     # --- 확률 산출 ---
+#     x = np.array([[data.mean_hr, data.std_hr, data.range_hr]])
+#     x_scaled = scaler.transform(x)
+#     p_ang = float(clf_gb.predict_proba(x_scaled)[0, 1])
+
+#     # --- 3클래스 판정 (같은 임계값 사용) ---
+#     result = predict_3class(p_ang, th_ang, th_sad)
+
+#     label_map = {0: "normal", 1: "sad", 2: "angry"}
+#     color_map = {0: "#4CAF50", 1: "#2196F3", 2: "#F44336"}
+#     emoji_map = {0: "😊", 1: "😢", 2: "😠"}
+
+#     return {
+#         "prob_angry": round(p_ang, 4),
+#         "prob_sad": round(1 - p_ang, 4),
+#         "class_id": result,
+#         "class_name": label_map[result],
+#         "color_hex": color_map[result],
+#         "emoji": emoji_map[result],
+#         "mbti_group": data.mbti_tf.upper(),
+#         "threshold_used": {          
+#             "group": group,
+#             "th_angry": th_ang,
+#             "th_sad": th_sad
+#         }
+#     }
+
 @app.post("/predict")
 def predict(data: EmotionInput):
-    # --- 그룹/임계값 선택 (한 번만) ---
-    group = "T" if data.mbti_tf.strip().lower()=="t" else "F"
-    if thresholds.get("use","TF") == "ALL":
+    # --- 입력 정규화 & 그룹 결정 ---
+    g = (data.mbti_tf or "").strip().lower()
+    if g not in {"t", "f"}:
+        g = "f"
+    group = "T" if g == "t" else "F"
+
+    use = (thresholds.get("use", "TF") or "TF").upper()
+    if use == "ALL":
         group = "ALL"
 
-    th = thresholds[group]
-    th_ang, th_sad = float(th["th_ang"]), float(th["th_sad"])
-    gap = th_ang - (1 - th_sad)
-    print(f"[CHK] group={group} th_ang={th_ang} th_sad={th_sad} gap={gap:.3f}")
+    # --- 임계값 로드(방어 포함) ---
+    th = thresholds.get(group)
+    if not isinstance(th, dict) or "th_ang" not in th or "th_sad" not in th:
+        th = thresholds.get("ALL") or thresholds.get("T") or thresholds.get("F")
 
-    # (선택) NORMAL 밴드 강제 확보
-    if gap <= 0:
-        bump = 0.02 - gap  # 최소 0.02 확보
+    th_ang = float(th["th_ang"])
+    th_sad = float(th["th_sad"])
+
+    # --- NORMAL 폭 보장 ---
+    target_gap = 0.20  # 서비스용 추천
+    gap = th_ang - (1 - th_sad)
+    if gap < target_gap:
+        bump = target_gap - gap
         th_ang = min(0.99, th_ang + bump/2)
         th_sad = min(0.99, th_sad + bump/2)
-        print(f"[FIX] adjusted th_ang={th_ang:.3f} th_sad={th_sad:.3f} (gap>0 enforced)")
 
-    # --- 확률 산출 ---
-    x = np.array([[data.mean_hr, data.std_hr, data.range_hr]])
+    print(f"[CHK] group={group} use={use} th_ang={th_ang:.3f} th_sad={th_sad:.3f} gap={th_ang-(1-th_sad):.3f}")
+
+    # --- 확률 ---
+    x = np.array([[data.mean_hr, data.std_hr, data.range_hr]], dtype=float)
     x_scaled = scaler.transform(x)
     p_ang = float(clf_gb.predict_proba(x_scaled)[0, 1])
 
-    # --- 3클래스 판정 (같은 임계값 사용) ---
+    # --- 3클래스 판정 ---
     result = predict_3class(p_ang, th_ang, th_sad)
 
     label_map = {0: "normal", 1: "sad", 2: "angry"}
@@ -181,11 +238,6 @@ def predict(data: EmotionInput):
         "class_name": label_map[result],
         "color_hex": color_map[result],
         "emoji": emoji_map[result],
-        "mbti_group": data.mbti_tf.upper(),
-        "threshold_used": {          
-            "group": group,
-            "th_angry": th_ang,
-            "th_sad": th_sad
-        }
+        "mbti_group": g.upper(),
+        "threshold_used": { "group": group, "th_angry": th_ang, "th_sad": th_sad }
     }
-
