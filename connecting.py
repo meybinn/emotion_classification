@@ -83,14 +83,23 @@ class EmotionInput(BaseModel):
     mbti_tf: str  # "t" or "f"
 
 # ===== 예측 함수 =====
-def predict_3class(p_ang, mbti_tf):
-    group = "T" if mbti_tf.lower() == "t" else "F"
-    if thresholds.get("use", "TF") == "ALL":
-        group = "ALL"
+# def predict_3class(p_ang, mbti_tf):
+#     group = "T" if mbti_tf.lower() == "t" else "F"
+#     if thresholds.get("use", "TF") == "ALL":
+#         group = "ALL"
 
-    th_ang = thresholds[group]["th_ang"]
-    th_sad = thresholds[group]["th_sad"]
+#     th_ang = thresholds[group]["th_ang"]
+#     th_sad = thresholds[group]["th_sad"]
 
+#     if p_ang >= th_ang:
+#         return 2  # angry
+#     elif (1 - p_ang) >= th_sad:
+#         return 1  # sad
+#     else:
+#         return 0  # normal
+
+# 임계갑말고 직접 받게
+def predict_3class(p_ang, th_ang, th_sad):
     if p_ang >= th_ang:
         return 2  # angry
     elif (1 - p_ang) >= th_sad:
@@ -99,27 +108,84 @@ def predict_3class(p_ang, mbti_tf):
         return 0  # normal
 
 # ===== API =====
+# @app.post("/predict")
+
+# def predict(data: EmotionInput):
+#     group = "T" if data.mbti_tf.strip().lower()=="t" else "F"
+#     if thresholds.get("use","TF") == "ALL":
+#         group = "ALL"
+#     th = thresholds[group]
+#     th_ang, th_sad = float(th["th_ang"]), float(th["th_sad"])
+#     print(f"[CHK] group={group} th_ang={th_ang} th_sad={th_sad} gap={th_ang - (1 - th_sad):.3f}")
+#     # gap > 0 이어야 NORMAL 구간 존재
+
+#     x = np.array([[data.mean_hr, data.std_hr, data.range_hr]])
+#     x_scaled = scaler.transform(x)
+#     p_ang = float(clf_gb.predict_proba(x_scaled)[:, 1])  # 일단 gradient boosting
+#     result = predict_3class(p_ang, data.mbti_tf)
+
+#     label_map = {0: "normal", 1: "sad", 2: "angry"}
+#     color_map = {0: "#4CAF50", 1: "#2196F3", 2: "#F44336"}  # Green, Blue, Red
+#     emoji_map = {0: "😊", 1: "😢", 2: "😠"}
+    
+#     return {
+#         "prob_angry": round(p_ang, 4),
+#         "prob_sad": round(1 - p_ang, 4),
+#         "class_id": result,
+#         "class_name": label_map[result],
+#         "color_hex": color_map[result],  # For Flutter UI
+#         "emoji": emoji_map[result],      # For display
+#         "mbti_group": data.mbti_tf.upper(),
+#         "threshold_used": {
+#             "th_angry": thresholds[data.mbti_tf.upper()]["th_ang"],
+#             "th_sad": thresholds[data.mbti_tf.upper()]["th_sad"]
+#         }
+#     }
+
+# 한 번 선택한 임계값을 로그, 판정, 응답 모두에 동일 적용
 @app.post("/predict")
 def predict(data: EmotionInput):
+    # --- 그룹/임계값 선택 (한 번만) ---
+    group = "T" if data.mbti_tf.strip().lower()=="t" else "F"
+    if thresholds.get("use","TF") == "ALL":
+        group = "ALL"
+
+    th = thresholds[group]
+    th_ang, th_sad = float(th["th_ang"]), float(th["th_sad"])
+    gap = th_ang - (1 - th_sad)
+    print(f"[CHK] group={group} th_ang={th_ang} th_sad={th_sad} gap={gap:.3f}")
+
+    # (선택) NORMAL 밴드 강제 확보
+    if gap <= 0:
+        bump = 0.02 - gap  # 최소 0.02 확보
+        th_ang = min(0.99, th_ang + bump/2)
+        th_sad = min(0.99, th_sad + bump/2)
+        print(f"[FIX] adjusted th_ang={th_ang:.3f} th_sad={th_sad:.3f} (gap>0 enforced)")
+
+    # --- 확률 산출 ---
     x = np.array([[data.mean_hr, data.std_hr, data.range_hr]])
     x_scaled = scaler.transform(x)
-    p_ang = float(clf_gb.predict_proba(x_scaled)[:, 1])  # 일단 gradient boosting
-    result = predict_3class(p_ang, data.mbti_tf)
+    p_ang = float(clf_gb.predict_proba(x_scaled)[0, 1])
+
+    # --- 3클래스 판정 (같은 임계값 사용) ---
+    result = predict_3class(p_ang, th_ang, th_sad)
 
     label_map = {0: "normal", 1: "sad", 2: "angry"}
-    color_map = {0: "#4CAF50", 1: "#2196F3", 2: "#F44336"}  # Green, Blue, Red
+    color_map = {0: "#4CAF50", 1: "#2196F3", 2: "#F44336"}
     emoji_map = {0: "😊", 1: "😢", 2: "😠"}
-    
+
     return {
         "prob_angry": round(p_ang, 4),
         "prob_sad": round(1 - p_ang, 4),
         "class_id": result,
         "class_name": label_map[result],
-        "color_hex": color_map[result],  # For Flutter UI
-        "emoji": emoji_map[result],      # For display
+        "color_hex": color_map[result],
+        "emoji": emoji_map[result],
         "mbti_group": data.mbti_tf.upper(),
-        "threshold_used": {
-            "th_angry": thresholds[data.mbti_tf.upper()]["th_ang"],
-            "th_sad": thresholds[data.mbti_tf.upper()]["th_sad"]
+        "threshold_used": {          
+            "group": group,
+            "th_angry": th_ang,
+            "th_sad": th_sad
         }
     }
+
