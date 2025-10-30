@@ -335,9 +335,9 @@ eval_model("GradientBoosting",   clf_gb)
 clf_gb.fit(x_train_bin_scaled, y_train_bin)
 p_val_gb = clf_gb.predict_proba(x_val)[:, 1]
 
-bestT_gb  = sweep_for_group(p_val_gb, y_val_np, maskT,  normal_band_margin=0.10)
-bestF_gb  = sweep_for_group(p_val_gb, y_val_np, maskF,  normal_band_margin=0.10)
-bestALL_gb= sweep_for_group(p_val_gb, y_val_np, maskALL,normal_band_margin=0.10)
+bestT_gb  = sweep_for_group(p_val_gb, y_val_np, maskT,  normal_band_margin=0.15)
+bestF_gb  = sweep_for_group(p_val_gb, y_val_np, maskF,  normal_band_margin=0.15)
+bestALL_gb= sweep_for_group(p_val_gb, y_val_np, maskALL,normal_band_margin=0.15)
 
 if (maskF.sum() < 4) or (bestF_gb is None) or (bestF_gb.get("score", 0) <= 0):
     bestF_gb = bestALL_gb or bestT_gb
