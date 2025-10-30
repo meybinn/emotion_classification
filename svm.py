@@ -371,4 +371,7 @@ print("✅ thresholds.json 저장 완료!")
 # print("train F1:", f1_score(y_train_resampled, clf_svm.predict(x_train_resampled), average="macro"))
 # print("val F1:",   f1_score(val["label"], clf_svm.predict(x_val), average="macro"))
 
-
+import joblib
+# After training...
+joblib.dump(scaler, "scaler.pkl")
+joblib.dump(clf_gb, "model_gb.pkl")
