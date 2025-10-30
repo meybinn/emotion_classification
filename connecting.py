@@ -97,9 +97,19 @@ def predict(data: EmotionInput):
     result = predict_3class(p_ang, data.mbti_tf)
 
     label_map = {0: "normal", 1: "sad", 2: "angry"}
+    color_map = {0: "#4CAF50", 1: "#2196F3", 2: "#F44336"}  # Green, Blue, Red
+    emoji_map = {0: "😊", 1: "😢", 2: "😠"}
+    
     return {
         "prob_angry": round(p_ang, 4),
         "prob_sad": round(1 - p_ang, 4),
         "class_id": result,
         "class_name": label_map[result],
+        "color_hex": color_map[result],  # For Flutter UI
+        "emoji": emoji_map[result],      # For display
+        "mbti_group": data.mbti_tf.upper(),
+        "threshold_used": {
+            "th_angry": thresholds[data.mbti_tf.upper()]["th_ang"],
+            "th_sad": thresholds[data.mbti_tf.upper()]["th_sad"]
+        }
     }
