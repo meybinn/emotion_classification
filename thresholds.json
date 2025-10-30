@@ -1,18 +1,18 @@
 {
     "T": {
-        "th_ang": 0.45,
-        "th_sad": 0.61,
-        "score": 0.75
+        "th_ang": 0.51,
+        "th_sad": 0.59,
+        "score": 0.4
     },
     "F": {
-        "th_ang": 0.45,
-        "th_sad": 0.61,
-        "score": 0.667
+        "th_ang": 0.51,
+        "th_sad": 0.59,
+        "score": 0.5
     },
     "ALL": {
-        "th_ang": 0.45,
-        "th_sad": 0.61,
-        "score": 0.667
+        "th_ang": 0.51,
+        "th_sad": 0.59,
+        "score": 0.5
     },
     "use": "TF"
 }

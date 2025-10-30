@@ -331,6 +331,38 @@ clf_gb = GradientBoostingClassifier(random_state=42)
 eval_model("RandomForest",       clf_rf)
 eval_model("GradientBoosting",   clf_gb)
 
+# gb 모델 thresholds 저장
+clf_gb.fit(x_train_bin_scaled, y_train_bin)
+p_val_gb = clf_gb.predict_proba(x_val)[:, 1]
+
+bestT_gb  = sweep_for_group(p_val_gb, y_val_np, maskT,  normal_band_margin=0.10)
+bestF_gb  = sweep_for_group(p_val_gb, y_val_np, maskF,  normal_band_margin=0.10)
+bestALL_gb= sweep_for_group(p_val_gb, y_val_np, maskALL,normal_band_margin=0.10)
+
+if (maskF.sum() < 4) or (bestF_gb is None) or (bestF_gb.get("score", 0) <= 0):
+    bestF_gb = bestALL_gb or bestT_gb
+
+print("✅ Gradient Boosting thresholds:")
+print("Best thresholds (T):", bestT_gb)
+print("Best thresholds (F):", bestF_gb)
+print("Best thresholds (ALL):", bestALL_gb)
+
+import json, joblib
+thresholds_dict = {
+    "T": bestT_gb,
+    "F": bestF_gb,
+    "ALL": bestALL_gb,
+    "use": "TF"
+}
+
+with open("thresholds.json", "w", encoding="utf-8") as f:
+    json.dump(thresholds_dict, f, indent=4)
+print("💾 Gradient Boosting용 thresholds.json 저장 완료!")
+
+joblib.dump(scaler, "scaler.pkl")
+joblib.dump(clf_gb, "model_gb.pkl")
+print("💾 모델 및 스케일러 저장 완료!")
+
 # 어플리케이션과 연동 (API)
 # import joblib
 
@@ -346,18 +378,18 @@ eval_model("GradientBoosting",   clf_gb)
 # print("모델, 스케일러, 임계값 저장 완료!")
 
 # 어플리케이션과 연동 (json)
-import json
+# import json
 
-thresholds_dict = {
-    "T": bestT_svm,
-    "F": bestF_svm,
-    "ALL": bestALL,
-    "use": "TF"  # 또는 "ALL"
-}
+# thresholds_dict = {
+#     "T": bestT_svm,
+#     "F": bestF_svm,
+#     "ALL": bestALL,
+#     "use": "TF"  # 또는 "ALL"
+# }
 
-with open("thresholds.json", "w", encoding="utf-8") as f:
-    json.dump(thresholds_dict, f, indent=4)
-print("✅ thresholds.json 저장 완료!")
+# with open("thresholds.json", "w", encoding="utf-8") as f:
+#     json.dump(thresholds_dict, f, indent=4)
+# print("✅ thresholds.json 저장 완료!")
 
 
 # 기본 svm 이진 분류
