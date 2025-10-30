@@ -52,6 +52,7 @@ import joblib, numpy as np
 
 # json 형식
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib, numpy as np, json
 
@@ -64,6 +65,15 @@ with open("thresholds.json", "r", encoding="utf-8") as f:
     thresholds = json.load(f)
 
 app = FastAPI()
+
+# ===== CORS 설정 =====
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 모든 origin 허용 (프로덕션에서는 특정 도메인으로 제한 권장)
+    allow_credentials=True,
+    allow_methods=["*"],  # 모든 HTTP 메서드 허용
+    allow_headers=["*"],  # 모든 헤더 허용
+)
 
 # ===== 입력 데이터 정의 =====
 class EmotionInput(BaseModel):
