@@ -84,12 +84,12 @@ app.add_middleware(
     allow_headers=["*"],  # 모든 헤더 허용
 )
 
-# ===== 입력 데이터 정의 =====
-class EmotionInput(BaseModel):
-    mean_hr: float
-    std_hr: float
-    range_hr: float
-    mbti_tf: str  # "t" or "f"
+# # ===== 입력 데이터 정의 =====
+# class EmotionInput(BaseModel):
+#     mean_hr: float
+#     std_hr: float
+#     range_hr: float
+#     mbti_tf: str  # "t" or "f"
 
 # ===== 예측 함수 =====
 # def predict_3class(p_ang, mbti_tf):
@@ -219,7 +219,7 @@ def predict(data: EmotionInput):
     th_sad = float(th["th_sad"])
 
     # --- NORMAL 폭 보장 ---
-    target_gap = 0.20  # 서비스용 추천
+    target_gap = 0.30  # 서비스용 추천   0.20  0.25   0.30
     gap = th_ang - (1 - th_sad)
     if gap < target_gap:
         bump = target_gap - gap
