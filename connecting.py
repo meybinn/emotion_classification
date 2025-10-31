@@ -51,10 +51,19 @@ import joblib, numpy as np
 
 
 # json 형식
+from typing import Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib, numpy as np, json
+
+class EmotionInput(BaseModel):
+    mean_hr: float
+    std_hr: float
+    range_hr: float
+    mbti_tf: str                   # "t" or "f"
+    debug_force_prob: Optional[float] = None  # ← 선택(0~1), 있으면 이 값으로 판정
+
 
 # ===== 모델 & 스케일러 로드 =====
 scaler = joblib.load("scaler.pkl")
@@ -220,9 +229,17 @@ def predict(data: EmotionInput):
     print(f"[CHK] group={group} use={use} th_ang={th_ang:.3f} th_sad={th_sad:.3f} gap={th_ang-(1-th_sad):.3f}")
 
     # --- 확률 ---
-    x = np.array([[data.mean_hr, data.std_hr, data.range_hr]], dtype=float)
-    x_scaled = scaler.transform(x)
-    p_ang = float(clf_gb.predict_proba(x_scaled)[0, 1])
+    # x = np.array([[data.mean_hr, data.std_hr, data.range_hr]], dtype=float)
+    # x_scaled = scaler.transform(x)
+    # p_ang = float(clf_gb.predict_proba(x_scaled)[0, 1])
+    # --- 확률 계산 ---
+    if data.debug_force_prob is not None:
+        p_ang = float(data.debug_force_prob)        # ← 디버그: 모델 건너뛰고 이 확률 사용
+    else:
+        x = np.array([[data.mean_hr, data.std_hr, data.range_hr]], dtype=float)
+        x_scaled = scaler.transform(x)
+        p_ang = float(clf_gb.predict_proba(x_scaled)[0, 1])
+
 
     # --- 3클래스 판정 ---
     result = predict_3class(p_ang, th_ang, th_sad)
@@ -230,6 +247,11 @@ def predict(data: EmotionInput):
     label_map = {0: "normal", 1: "sad", 2: "angry"}
     color_map = {0: "#4CAF50", 1: "#2196F3", 2: "#F44336"}
     emoji_map = {0: "😊", 1: "😢", 2: "😠"}
+
+
+    lower = 1.0 - th_sad
+    upper = th_ang
+    result = predict_3class(p_ang, th_ang, th_sad)
 
     return {
         "prob_angry": round(p_ang, 4),
@@ -239,5 +261,16 @@ def predict(data: EmotionInput):
         "color_hex": color_map[result],
         "emoji": emoji_map[result],
         "mbti_group": g.upper(),
-        "threshold_used": { "group": group, "th_angry": th_ang, "th_sad": th_sad }
+        "threshold_used": { 
+            "group": group, 
+            "th_angry": th_ang, 
+            "th_sad": th_sad 
+        },
+        "debug": {                           # ← 추가
+        "band_lower": round(lower, 4),
+        "band_upper": round(upper, 4),
+        "gap": round(upper - lower, 4),
+        "used_mode": use
+    }
+        
     }
